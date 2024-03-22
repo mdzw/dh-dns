@@ -43,7 +43,7 @@ class DreamHost:
     }
 
     def __init__(self, apiUrl, apiKey):
-        self.url = apiUrl + "?key=" + API_KEY + "&format=json"
+        self.url = apiUrl + "?key=" + apiKey + "&format=json"
         self.apiKey = apiKey
         self.allDomains = {}
 
@@ -87,29 +87,61 @@ class Logger:
     debug = logger.debug
 
 
+def setup_prowl(key):
+    if key == "":
+        return None
+
+    logger.info("Setting up Prowl notifications...")
+    prowl = pyprowl.Prowl(apiKey=key, appName="dh-dhs")
+    verifyKey = prowl.verify_key()
+    if verifyKey.get("status") == "success":
+        logger.info("Prowl API key successfully verified. Notifications enabled!")
+    else:
+        prowl = None
+        logger.error(
+            "Unable to verify Prowl API key. Disabling Prowl notifications. Error code: %s %s, message: %s",
+            verifyKey.get("status"),
+            verifyKey.get("message"),
+            verifyKey.get("errMsg"),
+        )
+    return prowl
+
+
+def send_prowl(prowl, event, description):
+    if prowl is None:
+        return
+    try:
+        prowlResult = prowl.notify(event, description)
+        if prowlResult.get("status") == "success":
+            logger.debug(
+                "Successfully sent notification to Prowl... Event: %s, Description: %s",
+                event,
+                description,
+            )
+        else:
+            logger.error(
+                "Failed to send notification to Prowl... Event: %s, Description: %s, Status code: %s %s, Error message: %s",
+                event,
+                description,
+                prowlResult.get("status"),
+                prowlResult.get("message"),
+                prowlResult.get("errMsg"),
+            )
+    except Exception as e:
+        logger.error(
+            "Failed to send notification to Prowl... Event: %s, Description: %s, Error message: %s",
+            event,
+            description,
+            e,
+        )
+
+
 def monitor(domains):
     """ domains is a list of Domain class objects """
     dh = DreamHost(API_URL, API_KEY)
     currentIp = ""
 
-    global PROWL_API_KEY
-    if PROWL_API_KEY != "":
-        logger.info("Setting up Prowl notifications...")
-        prowl = pyprowl.Prowl(apiKey=PROWL_API_KEY, appName="dh-dhs")
-        verifyKey = prowl.verify_key()
-        if verifyKey.get("status") == "success":
-            logger.info("Prowl API key successfully verified. Notifications enabled!")
-        else:
-            PROWL_API_KEY = ""
-            prowl = None
-            logger.error(
-                "Unable to verify Prowl API key. Disabling Prowl notifications. Error code: %s %s, message: %s",
-                verifyKey.get("status"),
-                verifyKey.get("message"),
-                verifyKey.get("errMsg"),
-            )
-    else:
-        prowl = None
+    prowl = setup_prowl(PROWL_API_KEY)
 
     while True:  # Enter update loop
         # Pull current domain info from DH
@@ -188,30 +220,7 @@ def monitor(domains):
                                 + domain.name
                                 + " is monitored but DreamHost says it is not editable."
                             )
-                            try:
-                                prowlResult = prowl.notify(event, description)
-                                if prowlResult.get("status") == "success":
-                                    logger.debug(
-                                        "Successfully sent notification to Prowl... Event: %s, Description: %s",
-                                        event,
-                                        description,
-                                    )
-                                else:
-                                    logger.error(
-                                        "Failed to send notification to Prowl... Event: %s, Description: %s, Status code: %s %s, Error message: %s",
-                                        event,
-                                        description,
-                                        prowlResult.get("status"),
-                                        prowlResult.get("message"),
-                                        prowlResult.get("errMsg"),
-                                    )
-                            except Exception as e:
-                                logger.error(
-                                    "Failed to send notification to Prowl... Event: %s, Description: %s, Error message: %s",
-                                    event,
-                                    description,
-                                    e,
-                                )
+                            send_prowl(prowl, event, description)
 
                     elif dh.allDomains.get(domain.name).get("value") == newIp:
                         logger.info("No update needed for %s.", domain.name)
@@ -250,30 +259,7 @@ def monitor(domains):
                                     + "], but the deletion failed.\nError message: "
                                     + dhRemoveResponse.get("data")
                                 )
-                                try:
-                                    prowlResult = prowl.notify(event, description)
-                                    if prowlResult.get("status") == "success":
-                                        logger.debug(
-                                            "Successfully sent notification to Prowl... Event: %s, Description: %s",
-                                            event,
-                                            description,
-                                        )
-                                    else:
-                                        logger.error(
-                                            "Failed to send notification to Prowl... Event: %s, Description: %s, Status code: %s %s, Error message: %s",
-                                            event,
-                                            description,
-                                            prowlResult.get("status"),
-                                            prowlResult.get("message"),
-                                            prowlResult.get("errMsg"),
-                                        )
-                                except Exception as e:
-                                    logger.error(
-                                        "Failed to send notification to Prowl... Event: %s, Description: %s, Error message: %s",
-                                        event,
-                                        description,
-                                        e,
-                                    )
+                                send_prowl(prowl, event, description)
                 else:
                     # Monitored domain does not exist
                     logger.info("Domain %s does not exist.", domain.name)
@@ -315,30 +301,7 @@ def monitor(domains):
                                 + newIp
                                 + "]."
                             )
-                            try:
-                                prowlResult = prowl.notify(event, description)
-                                if prowlResult.get("status") == "success":
-                                    logger.debug(
-                                        "Successfully sent notification to Prowl... Event: %s, Description: %s",
-                                        event,
-                                        description,
-                                    )
-                                else:
-                                    logger.error(
-                                        "Failed to send notification to Prowl... Event: %s, Description: %s, Status code: %s %s, Error message: %s",
-                                        event,
-                                        description,
-                                        prowlResult.get("status"),
-                                        prowlResult.get("message"),
-                                        prowlResult.get("errMsg"),
-                                    )
-                            except Exception as e:
-                                logger.error(
-                                    "Failed to send notification to Prowl... Event: %s, Description: %s, Error message: %s",
-                                    event,
-                                    description,
-                                    e,
-                                )
+                            send_prowl(prowl, event, description)
                     else:
                         logger.error(
                             "Error adding domain %s: %s.",
@@ -355,30 +318,7 @@ def monitor(domains):
                                 + "]:\n"
                                 + dhAddResponse.get("data")
                             )
-                            try:
-                                prowlResult = prowl.notify(event, description)
-                                if prowlResult.get("status") == "success":
-                                    logger.debug(
-                                        "Successfully sent notification to Prowl... Event: %s, Description: %s",
-                                        event,
-                                        description,
-                                    )
-                                else:
-                                    logger.error(
-                                        "Failed to send notification to Prowl... Event: %s, Description: %s, Status code: %s %s, Error message: %s",
-                                        event,
-                                        description,
-                                        prowlResult.get("status"),
-                                        prowlResult.get("message"),
-                                        prowlResult.get("errMsg"),
-                                    )
-                            except Exception as e:
-                                logger.error(
-                                    "Failed to send notification to Prowl... Event: %s, Description: %s, Error message: %s",
-                                    event,
-                                    description,
-                                    e,
-                                )
+                            send_prowl(prowl, event, description)
 
             currentIp = newIp
             logger.info(
